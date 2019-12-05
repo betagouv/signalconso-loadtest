@@ -1,0 +1,18 @@
+{
+    "category":"Café / Restaurant",
+    "subcategories":["Hygiène","J'ai vu un animal (nuisible)"],
+    "companyName":"OLA PIZZ",
+    "companyAddress":"OLA PIZZ - 7 B RUE DES COURANCES - 37500 CHINON",
+    "companyPostalCode":"37500",
+    "companySiret":"${companySiret}",
+    "firstName":"${firstName}",
+    "lastName":"Doe${randNumber}",
+    "email":"doe${randNumber}@example.com",
+    "contactAgreement":false,
+    "employeeConsumer":false,
+    "files":[${uploadResult}],
+    "details":[
+      {"label":"Date du constat :","value":"05/12/2019"},
+      {"label":"Quel animal avez-vous vu&#160;:","value":"Rongeurs (rat, souris...)"},
+      {"label":"Où l'avez-vous vu&#160;:","value":"Dans mon plat"}
+]}

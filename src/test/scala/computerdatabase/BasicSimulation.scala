@@ -17,36 +17,39 @@ class BasicSimulation extends Simulation {
   val firstNames = Array("John", "Jane", "Margaret", "Georges", "Kate")
 
   val randomFeeder = Iterator.continually(Map(
-    "firstName" -> firstNames(Random.nextInt(firstNames.length)),
-    "siret"     -> Random.alphanumeric.filter(_.isDigit).take(9).mkString,
-    "number"    -> Random.nextInt(1000000)
+    "firstName"     -> firstNames(Random.nextInt(firstNames.length)),
+    "companySiret"  -> Random.alphanumeric.filter(_.isDigit).take(9).mkString,
+    "randNumber"    -> Random.nextInt(1000000),
+    "uploadResult"  -> ""
   ))
 
-  val scn = scenario("Submit a report without attachment")
+  val reportWithoutAttachment = scenario("Submit a report without attachment")
     .feed(randomFeeder)
     .exec(http("Send report")
       .post("/api/reports")
-      .body(StringBody("""
-      {
-        "category":"Café / Restaurant",
-        "subcategories":["Hygiène","J'ai vu un animal (nuisible)"],
-        "companyName":"OLA PIZZ",
-        "companyAddress":"OLA PIZZ - 7 B RUE DES COURANCES - 37500 CHINON",
-        "companyPostalCode":"37500",
-        "companySiret":"83493288100016",
-        "firstName":"${firstName}",
-        "lastName":"Doe${number}",
-        "email":"doe${number}@example.com",
-        "contactAgreement":false,
-        "employeeConsumer":false,
-        "files":[],
-        "details":[
-          {"label":"Date du constat :","value":"05/12/2019"},
-          {"label":"Quel animal avez-vous vu&#160;:","value":"Rongeurs (rat, souris...)"},
-          {"label":"Où l'avez-vous vu&#160;:","value":"Dans mon plat"}
-        ]}
-      """)).asJson
+      .body(ElFileBody("requests/report.json")).asJson
     )
 
-  setUp(scn.inject(atOnceUsers(2)).protocols(httpProtocol))
+  def withAttachment(size: String) = scenario(s"Submit a report with a ${size} attachment")
+    .feed(randomFeeder)
+    .exec(http("Upload file")
+      .post("/api/reports/files")
+      .formUpload("reportFile", s"attachments/${size}.jpg")
+      .check(
+        status.is(200),
+        bodyString.saveAs("uploadResult")
+      )
+    )
+    .pause(200 milliseconds, 3 seconds)
+    .exec(
+      http("Send report")
+      .post("/api/reports")
+      .body(ElFileBody("requests/report.json")).asJson
+    )
+
+  setUp(
+    reportWithoutAttachment.inject(rampUsers(1000) during (100 seconds)),
+    withAttachment("small").inject(rampUsers(500) during (100 seconds)),
+    withAttachment("large").inject(rampUsers(50) during (100 seconds))
+  ).protocols(httpProtocol)
 }
