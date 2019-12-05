@@ -23,16 +23,16 @@ class BasicSimulation extends Simulation {
     "uploadResult"  -> ""
   ))
 
-  val reportWithoutAttachment = scenario("Submit a report without attachment")
+  val reportWithoutAttachment = scenario("Déclaration d'un signalement sans PJ")
     .feed(randomFeeder)
-    .exec(http("Send report")
+    .exec(http("Envoi du signalement")
       .post("/api/reports")
       .body(ElFileBody("requests/report.json")).asJson
     )
 
-  def withAttachment(size: String) = scenario(s"Submit a report with a ${size} attachment")
+  def withAttachment(size: String) = scenario(s"Déclaration d'un signalement avec une PJ (${size})")
     .feed(randomFeeder)
-    .exec(http("Upload file")
+    .exec(http(s"Envoi d'une PJ au signalement (${size})")
       .post("/api/reports/files")
       .formUpload("reportFile", s"attachments/${size}.jpg")
       .check(
@@ -42,14 +42,14 @@ class BasicSimulation extends Simulation {
     )
     .pause(200 milliseconds, 3 seconds)
     .exec(
-      http("Send report")
+      http("Envoi du signalement")
       .post("/api/reports")
       .body(ElFileBody("requests/report.json")).asJson
     )
 
   setUp(
-    reportWithoutAttachment.inject(rampUsers(1000) during (100 seconds)),
-    withAttachment("small").inject(rampUsers(500) during (100 seconds)),
-    withAttachment("large").inject(rampUsers(50) during (100 seconds))
+    reportWithoutAttachment.inject(rampUsers(1000) during (60 seconds)),
+    withAttachment("small").inject(rampUsers(500) during (60 seconds)),
+    withAttachment("large").inject(rampUsers(50) during (60 seconds))
   ).protocols(httpProtocol)
 }
