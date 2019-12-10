@@ -5,6 +5,11 @@ import io.gatling.http.Predef._
 import scala.concurrent.duration._
 import scala.util.Random
 
+/*
+ * App : https://app-721f65f7-5c97-43b6-b753-31b3af32745a.cleverapps.io
+ * Api : https://app-513c11a7-052f-4ff1-8670-5a17dacb7327.cleverapps.io
+ */
+
 class BasicSimulation extends Simulation {
 
   val httpProtocol = http
@@ -16,7 +21,7 @@ class BasicSimulation extends Simulation {
 
   val firstNames = Array("John", "Jane", "Margaret", "Georges", "Kate")
 
-  val randomFeeder = Iterator.continually(Map(
+  val reportFeeder = Iterator.continually(Map(
     "firstName"     -> firstNames(Random.nextInt(firstNames.length)),
     "companySiret"  -> Random.alphanumeric.filter(_.isDigit).take(9).mkString,
     "randNumber"    -> Random.nextInt(1000000),
@@ -24,14 +29,14 @@ class BasicSimulation extends Simulation {
   ))
 
   val reportWithoutAttachment = scenario("Déclaration d'un signalement sans PJ")
-    .feed(randomFeeder)
+    .feed(reportFeeder)
     .exec(http("Envoi du signalement")
       .post("/api/reports")
       .body(ElFileBody("requests/report.json")).asJson
     )
 
   def withAttachment(size: String) = scenario(s"Déclaration d'un signalement avec une PJ (${size})")
-    .feed(randomFeeder)
+    .feed(reportFeeder)
     .exec(http(s"Envoi d'une PJ au signalement (${size})")
       .post("/api/reports/files")
       .formUpload("reportFile", s"attachments/${size}.jpg")
@@ -46,10 +51,51 @@ class BasicSimulation extends Simulation {
       .post("/api/reports")
       .body(ElFileBody("requests/report.json")).asJson
     )
+  
+  val ccrfBasic = scenario("Un agent CCRF se connecte et consulte le dernier signalement")
+    .exec(http("Login de l'agent")
+      .post("/api/authenticate")
+      .body(StringBody("""
+      {
+        "login": "test.dgccrf@signalconso.beta.gouv.fr",
+        "password": "test"
+      }
+      """)).asJson
+      .check(jsonPath("$.token").saveAs("authToken"))
+    )
+    .doIf("${authToken.exists()}") {
+      exec(http("Liste des 20 derniers signalements")
+        .get("/api/reports?offset=0&limit=20")
+        .header("X-Auth-Token", "${authToken}")
+        .check(jsonPath("$.entities[0].id").saveAs("reportId"))
+      )
+    }
+    .doIf("${reportId.exists()}") {
+      exec(http("Consultation du dernier signalement")
+        .get("/api/reports/${reportId}")
+        .header("X-Auth-Token", "${authToken}")
+        .check(
+          jsonPath("$.files[0].id").optional.saveAs("reportFileId"),
+          jsonPath("$.files[0].filename").optional.saveAs("reportFilename")
+        )
+      )
+      .exec(http("Consultation des évènements du signalement")
+        .get("/api/reports/${reportId}/events")
+        .header("X-Auth-Token", "${authToken}")
+      )
+      .doIf("${reportFileId.exists()}") {
+        exec(
+          http("Consultation d'une pièce-jointe")
+          .get("/api/reports/files/${reportFileId}/${reportFilename}")
+          .check(md5.in("fb167b7ee93c54cf92250f29654f95f0", "314eaf7f6b1783510fd12ac893e63063"))
+        )
+      }
+    }
 
   setUp(
-    reportWithoutAttachment.inject(rampUsers(1000) during (60 seconds)),
-    withAttachment("small").inject(rampUsers(500) during (60 seconds)),
-    withAttachment("large").inject(rampUsers(50) during (60 seconds))
+    ccrfBasic.inject(rampUsers(10) during (5 seconds)),
+    reportWithoutAttachment.inject(rampUsers(10) during (5 seconds)),
+    withAttachment("small").inject(rampUsers(10) during (5 seconds)),
+    withAttachment("large").inject(rampUsers(5) during (5 seconds))
   ).protocols(httpProtocol)
 }
